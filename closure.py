@@ -74,13 +74,11 @@ def compute_hull(g, S, weight, comps=None,hist=None,compute_closure=True):
             starting_nodes = np.arange(g.num_vertices())[I_S]
         else:
             starting_nodes = np.arange(g.num_vertices())[S]
-        starting_nodes[starting_nodes > v]
+        starting_nodes = starting_nodes[starting_nodes > v]
 
         dag.add_edge_list(np.column_stack((np.repeat(n,starting_nodes.size), starting_nodes)))
 
-
         bfs_search(dag, n, VisitorExample2(visited_nodes))
-
 
         if compute_closure:
             for i in range(g.num_vertices()):
@@ -90,8 +88,6 @@ def compute_hull(g, S, weight, comps=None,hist=None,compute_closure=True):
         I_S[visited_nodes.get_array()[:-1] == 1] = True
 
         dag.clear_edges()
-
-        #print(v,np.sum(I_S))
 
         if comps is not None:
             if np.sum(I_S) == np.sum(hist[np.unique(comps.get_array()[I_S])]):
