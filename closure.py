@@ -16,7 +16,8 @@ def dumb_compute_closed_interval(g, S, weight):
 
     return visited_nodes
 
-def compute_hull(g, S, weight, compute_closure=True):
+def compute_hull(g, S, weight, comps=None,hist=None,compute_closure=True):
+    n = g.num_vertices()
     class VisitorExample(DijkstraVisitor):
 
         def __init__(self, dists, dag, real_dists):
@@ -37,15 +38,22 @@ def compute_hull(g, S, weight, compute_closure=True):
 
     for v in S:
         q.put(v)
+
+        dag = Graph()
+        dag.add_vertex(n+1)
+
+
     while not q.empty():
         v = q.get()
-        dag = Graph()
-        dag.add_vertex(g.num_vertices())
 
         #graph_draw(g, vertex_text=g.vertex_index, output="gtemp.png", output_size=(1000, 1000), vertex_font_size=20)
 
+
         dist_map, pred_map = dijkstra_search(g, weight, g.vertex(v))
+        #all_pred_maps = all_predecessors(g, dist_map, pred_map, weights=weight)
+
         dist_map, pred_map = dijkstra_search(g, weight, g.vertex(v), VisitorExample(weight, dag, dist_map))
+
 
         #graph_draw(dag, vertex_text=dag.vertex_index, output="dag.png", output_size=(1000, 1000), vertex_font_size=20)
 
@@ -63,20 +71,34 @@ def compute_hull(g, S, weight, compute_closure=True):
         visited_nodes = dag.new_vertex_property("bool", val=False)
 
         if compute_closure:
-            for w in np.arange(g.num_vertices())[I_S == True]:
-                bfs_search(dag, w, VisitorExample2(visited_nodes))
+            starting_nodes = np.arange(g.num_vertices())[I_S]
         else:
-            for w in S:
-                bfs_search(dag, w, VisitorExample2(visited_nodes))
+            starting_nodes = np.arange(g.num_vertices())[S]
+        starting_nodes[starting_nodes > v]
+
+        dag.add_edge_list(np.column_stack((np.repeat(n,starting_nodes.size), starting_nodes)))
+
+
+        bfs_search(dag, n, VisitorExample2(visited_nodes))
+
 
         if compute_closure:
             for i in range(g.num_vertices()):
                 if not I_S[i] and visited_nodes[i]:
                     q.put(i)
 
-        I_S[visited_nodes.get_array() == 1] = True
+        I_S[visited_nodes.get_array()[:-1] == 1] = True
 
-        #print(np.sum(I_S))
+        dag.clear_edges()
+
+        #print(v,np.sum(I_S))
+
+        if comps is not None:
+            if np.sum(I_S) == np.sum(hist[np.unique(comps.get_array()[I_S])]):
+                break
+        elif np.sum(I_S) == n:
+            break
+
     return I_S
 
 '''

@@ -10,13 +10,13 @@ def is_convex(dataset):
     X = (X - np.min(X, axis=0)) / (np.max(X, axis=0) - np.min(X, axis=0))
     y = (np.genfromtxt('res/benchmark/SSL,set=' + str(dataset) + ',y.tab'))
 
-    n = 200
-    for sigma in [1,2,5,10,20]:
+    n = 1500
+    for n_prime in [60]:
         print("================================")
-        print("sigma=",sigma)
-        for q in [0.1,0.2,0.3,0.5,0.9]:
+        print("n_prime=",n_prime)
+        for q in [0.005,0.01,0.02,0.05]:
             print("q=",q)
-            dists = scipy.spatial.distance.cdist(X[:n,:n], X[:n,:n])
+            dists = scipy.spatial.distance.cdist(X, X)
             y = y[:n]
 
             # average_knn_dist = np.average(np.sort(X)[:,:5])
@@ -24,39 +24,40 @@ def is_convex(dataset):
                                                 (dists.shape[0], dists.shape[1] - 1))
             #sigma = np.average(np.sort(dists_without_diagonal)[5]) / 3
 
-            W = dists#np.exp(-(dists) ** 2 / (2 * sigma ** 2))
+            W = dists[:n,:n]#np.exp(-(dists) ** 2 / (2 * sigma ** 2))
             np.fill_diagonal(W, 0)
             W[W > np.quantile(W,q)] = np.inf
             # W2 = np.copy(W) less edges is slower strangely
             # W2[W2 <= 0.1] = 0
 
 
-            weights = W.flatten()
-            a, b = W.nonzero()
-            edges = np.transpose(np.vstack((a, b, weights[weights != 0])))
+            weights = W[(W<np.inf) & (W>0)].flatten()
+            edges = np.array(np.where((W<np.inf) & (W>0))).T
 
             np.random.seed(0)
 
             g = gt.Graph()
 
             # construct actual graph
-            g.add_vertex(W.shape[0])
-            weight = g.new_edge_property("long double")
-            eprops = [weight]
-            g.add_edge_list(edges, eprops=eprops)
+            g.add_vertex(n)
+            g.add_edge_list(edges)
+            weight_prop = g.new_edge_property("double", vals=weights)
 
-            pos = list(np.arange(n)[y > 0])
-            neg = list(np.arange(n)[y <= 0])
+            comps,hist = gt.topology.label_components(g)
+            pos = list(np.arange(n)[y > 0])[:n_prime]
+            neg = list(np.arange(n)[y <= 0])[:n_prime]
 
             #print(n,pos,neg)
             #print("p",len(pos))
             #print("n",len(neg))
 
-            pos_hull = closure.compute_hull(g,pos,weight)
+            pos_hull = closure.compute_hull(g,pos, weight_prop,comps,hist)
             print(np.sum(pos_hull))
-            neg_hull = closure.compute_hull(g, neg, weight)
+            neg_hull = closure.compute_hull(g, neg, weight_prop,comps,hist)
             print(np.sum(neg_hull))
             print(len(set(np.where(pos_hull)[0]).intersection(set(np.where(neg_hull)[0])))/n)
 
 
-is_convex(3)
+is_convex(2)
+#is_convex(2)
+#is_convex(3)
