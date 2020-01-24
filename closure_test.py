@@ -4,11 +4,12 @@ import scipy
 
 import closure
 from DijkstraVisitingMostNodes import shortest_path_cover_logn_apx
+from simplicial_vertices import simplicial_vertices
 
 
 def is_convex(dataset):
     X = np.genfromtxt('res/benchmark/SSL,set=' + str(dataset) + ',X.tab')
-    X = (X - np.min(X, axis=0)) / (np.max(X, axis=0) - np.min(X, axis=0))
+    #X = (X - np.min(X, axis=0)) / (np.max(X, axis=0) - np.min(X, axis=0))
     y = (np.genfromtxt('res/benchmark/SSL,set=' + str(dataset) + ',y.tab'))
 
     n = 1500
@@ -41,6 +42,8 @@ def is_convex(dataset):
 
 
             comps,hist = gt.topology.label_components(g)
+
+            print(len(simplicial_vertices(g)))
 
             paths = shortest_path_cover_logn_apx(g, weight_prop)
 

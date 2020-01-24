@@ -37,14 +37,17 @@ def shortest_path_visiting_most_nodes(g: Graph, adjusted_weight: EdgePropertyMap
 
     dist_map= shortest_distance(g, weights=adjusted_weight)
 
-    visited_source_vertex = np.zeros(g.num_vertices(), dtype=np.bool)
-    visited_source_vertex[list(covered_vertices)] = True
+    not_visited_source_vertex = np.ones(g.num_vertices(), dtype=np.bool)
+    not_visited_source_vertex[list(covered_vertices)] = False
+    not_visited_source_vertex = not_visited_source_vertex.reshape(g.num_vertices(), 1)
 
-    all_dists = dist_map.get_2d_array(range(g.num_vertices())) + (1-visited_source_vertex) #shortest path does only count the edges. so we have add one if the starting vertex was not visited.
+    all_dists = dist_map.get_2d_array(range(g.num_vertices())).T #shortest path does only count the edges. so we have add one if the starting vertex was not visited.
 
     all_dists[(all_dists > summed_edge_weight) | (all_dists < 0)] = 0
 
-    source, target = np.unravel_index((all_dists % g.num_vertices()).argmax(), all_dists.shape)
+    all_dists = (g.num_vertices()+1 - all_dists) % (g.num_vertices()+1)
+
+    source, target = np.unravel_index((all_dists+not_visited_source_vertex).argmax(), all_dists.shape)
 
     _,pred_map = dijkstra_search(g, adjusted_weight, source)
 
@@ -54,6 +57,13 @@ def shortest_path_visiting_most_nodes(g: Graph, adjusted_weight: EdgePropertyMap
     while pred_map[cursor] != cursor:
         shortest_path.add(cursor)
         cursor = pred_map[cursor]
+
+    if (all_dists+not_visited_source_vertex).max() != len(shortest_path.difference(covered_vertices)):
+        exit(10)
+
+    #trim covered vertices from start and end
+    #...
+    #better: build this step directly into the weight function s.t. |P| is minimized as a third priority?
 
     return shortest_path
 
@@ -67,18 +77,18 @@ def shortest_path_cover_logn_apx(g: Graph, weight: EdgePropertyMap):
 
 
 
-    if weight.python_value_type() not in ["bool","int","int16_t", "int32_t", "int64_t"]:
-        min = np.min(weight.a)
-        min_second = np.min(weight.a[weight.a > min])
+    if weight.value_type() not in ["bool","int","int16_t", "int32_t", "int64_t"]:
+        #min = np.min(weight.a)
+        #min_second = np.min(weight.a[weight.a > min])
 
-        eps = min_second - min
-        scaled_weight = (np.floor(weight.a / eps) * g.num_vertices()).astype(np.int)  # ints >= 1
+        eps = 1#min_second - min
+        scaled_weight = (np.ceil(weight.a / eps) * (g.num_vertices()+1)).astype(np.int)  # ints >= 1
     else:
-        scaled_weight = weight.a*g.num_vertices()
+        scaled_weight = weight.a*(g.num_vertices()+1)
 
     summed_edge_weight = np.sum(scaled_weight)
 
-    adjusted_weight = g.new_edge_property("long", vals=scaled_weight + 1)
+    adjusted_weight = g.new_edge_property("long", vals=scaled_weight - 1)
 
 
     paths = []
@@ -89,32 +99,47 @@ def shortest_path_cover_logn_apx(g: Graph, weight: EdgePropertyMap):
         path = shortest_path_visiting_most_nodes(g, adjusted_weight,covered_vertices,summed_edge_weight)
         paths.append(path)
 
+        #if len(path) <= 2 switch to fast mode and just add single edges/vertices until done.
+
         for v in path.difference(covered_vertices):
             for w in g.get_in_neighbors(v):
-                adjusted_weight[g.edge(v,w)] -= 1#.a[list()] -= 1
+                adjusted_weight[g.edge(w,v)] += 1#.a[list()] -= 1
+                if adjusted_weight[g.edge(w,v)] % (g.num_vertices()+1) != 0:
+                    exit(5)
+        new_covered = path.difference(covered_vertices)
         covered_vertices = covered_vertices.union(path)
-        print(len(path), len(covered_vertices))
+        print(len(new_covered), len(path), len(covered_vertices), path)
 
     return paths
 
 if __name__ == "__main__":
-    for k in range(1,11):
-        print("n=", k*100)
-        for i in range(10):
+    g = Graph(directed=False)
 
-            deg_sampler = lambda: (np.random.randint(1,3),np.random.randint(1,3))
-            n = k*100
-            g= random_graph(n,deg_sampler)
-            weight=g.new_edge_property("double", val=1)
+    g.add_vertex(10)
 
-            paths = shortest_path_cover_logn_apx(g, weight)
+    S = [0, 5, 2]
 
-            sum = 0
-            for i in paths:
-                sum += np.ceil(np.log2(len(i)))
+    weight = g.new_edge_property("int")
 
-            print("|S|=",len(paths))
-            print("#queries<=",sum, "%:", sum/n)
+    e = g.add_edge(0, 1)
+    weight[e] = 4
+    e = g.add_edge(1, 2)
+    weight[e] = 4
+    e = g.add_edge(0, 3)
+    weight[e] = 1
+    e = g.add_edge(3, 4)
+    weight[e] = 1
+    e = g.add_edge(4, 5)
+    weight[e] = 1
+    e = g.add_edge(5, 6)
+    weight[e] = 1
+    e = g.add_edge(6, 7)
+    weight[e] = 1
+    e = g.add_edge(7, 8)
+    weight[e] = 1
+    e = g.add_edge(8, 9)
+    weight[e] = 1
+    e = g.add_edge(9, 2)
+    weight[e] = 1
 
-
-        print("==============================")
+    shortest_path_cover_logn_apx(g, weight)
