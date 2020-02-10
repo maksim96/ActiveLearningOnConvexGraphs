@@ -16,19 +16,19 @@ def dumb_compute_closed_interval(g, S, weight):
 
     return visited_nodes
 
-def compute_hull(g, S, weight, comps=None,hist=None,compute_closure=True):
+def compute_hull(g, S, weight=None, dist_map=None, comps=None,hist=None,compute_closure=True):
+    """
+
+    :param g:
+    :param S:
+    :param weight: if = None, unit distance is used, which is faster.
+    :param dist_map: n*n array with the pairwise shortest distances. if = None, the function will compute it itself
+    :param comps:
+    :param hist:
+    :param compute_closure: #hull=closure or geodeteic set, which is faster
+    :return:
+    """
     n = g.num_vertices()
-    class VisitorExample(DijkstraVisitor):
-
-        def __init__(self, dists, dag, real_dists):
-            self.dists = dists
-            self.dag = dag
-            self.real_dists = real_dists
-
-        def examine_edge(self, e):
-            if self.real_dists[e.source()] + self.dists[e] == self.real_dists[e.target()]:
-                self.dag.add_edge(e.target(), e.source())
-                #print(e)
 
     I_S = np.zeros(g.num_vertices(), dtype=np.bool)
 
@@ -39,56 +39,28 @@ def compute_hull(g, S, weight, comps=None,hist=None,compute_closure=True):
     for v in S:
         q.put(v)
 
-        dag = Graph()
-        dag.add_vertex(n+1)
-
+    if dist_map is None:
+        dist_map = shortest_distance(g, weights=weight).get_2d_array(range(n))
 
     while not q.empty():
         v = q.get()
-
-        #graph_draw(g, vertex_text=g.vertex_index, output="gtemp.png", output_size=(1000, 1000), vertex_font_size=20)
-
-
-        dist_map, pred_map = dijkstra_search(g, weight, g.vertex(v))
-        #all_pred_maps = all_predecessors(g, dist_map, pred_map, weights=weight)
-
-        dist_map, pred_map = dijkstra_search(g, weight, g.vertex(v), VisitorExample(weight, dag, dist_map))
-
-
-        #graph_draw(dag, vertex_text=dag.vertex_index, output="dag.png", output_size=(1000, 1000), vertex_font_size=20)
-
-        # dag is the predeccesor dag marking all the nodes which are visitable by shartest paths from the source
-        # now mark them all by bfs
-
-        class VisitorExample2(BFSVisitor):
-
-            def __init__(self, visited_nodes):
-                self.visited_nodes = visited_nodes
-
-            def examine_vertex(self, u):
-                self.visited_nodes[u] = True
-
-        visited_nodes = dag.new_vertex_property("bool", val=False)
-
         if compute_closure:
             starting_nodes = np.arange(g.num_vertices())[I_S]
         else:
             starting_nodes = np.arange(g.num_vertices())[S]
         starting_nodes = starting_nodes[starting_nodes > v]
 
-        dag.add_edge_list(np.column_stack((np.repeat(n,starting_nodes.size), starting_nodes)))
-
-        bfs_search(dag, n, VisitorExample2(visited_nodes))
+        #all vertices x s.t. d(v,x)+d(x,s)=d(v,s) for some s \in S. These are exactly the ones on any shortest v-s-paths.
+        visited_nodes = np.any(dist_map[v,:]+dist_map[:,starting_nodes].T==dist_map[v,starting_nodes][:,np.newaxis],axis=0)
 
         if compute_closure:
             for i in range(g.num_vertices()):
                 if not I_S[i] and visited_nodes[i]:
                     q.put(i)
 
-        I_S[visited_nodes.get_array()[:-1] == 1] = True
+        I_S[visited_nodes] = True
 
-        dag.clear_edges()
-
+        #eartly stopping if already covered all the connected components of S
         if comps is not None:
             if np.sum(I_S) == np.sum(hist[np.unique(comps.get_array()[I_S])]):
                 break
