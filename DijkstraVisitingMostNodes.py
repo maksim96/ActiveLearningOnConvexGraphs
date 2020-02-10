@@ -5,30 +5,6 @@ from graph_tool.all import *
 import numpy as np
 from graph_tool.search import libgraph_tool_search
 
-
-
-'''
-g: Directed graph
-weight: EdgeProperty map with vector<double> of length 2 values. First entry normal weight, second entry = 1 <=> not visited target
-'''
-def shortest_source_target_path_visiting_most_nodes(g, adjusted_weight, source, target):
-    visited_nodes = g.new_vertex_property("int")
-    visited_nodes[0] = 1
-    dist_map, pred_map = dijkstra_search_fix(g, adjusted_weight, source, target)
-
-    shortest_path = {source}
-
-    cursor = target
-    while pred_map[cursor] != cursor:
-        shortest_path.add(cursor)
-        cursor = pred_map[cursor]
-
-    num_visited_nodes = dist_map.get_2d_array(range(2))[1, target]
-    if num_visited_nodes < np.inf:
-        return shortest_path, num_visited_nodes
-    else:
-        return shortest_path, 0
-
 '''
 g: Directed graph
 weight: EdgeProperty map with vector<double> of length 2 values. First entry normal weight, second entry = 1 <=> not visited target
@@ -47,25 +23,64 @@ def shortest_path_visiting_most_nodes(g: Graph, adjusted_weight: EdgePropertyMap
 
     all_dists = (g.num_vertices()+1 - all_dists) % (g.num_vertices()+1)
 
-    source, target = np.unravel_index((all_dists+not_visited_source_vertex).argmax(), all_dists.shape)
+    shortest_paths = []
+    all_currently_covered_vertices = set()
+    current_length = -1
+    z = 0
 
-    _,pred_map = dijkstra_search(g, adjusted_weight, source)
+    '''if (all_dists + not_visited_source_vertex).max()>2:'''
 
-    shortest_path = {source}
+    while True:
 
-    cursor = target
-    while pred_map[cursor] != cursor:
-        shortest_path.add(cursor)
-        cursor = pred_map[cursor]
+        source, target = np.unravel_index((all_dists+not_visited_source_vertex).argmax(), all_dists.shape)
 
-    if (all_dists+not_visited_source_vertex).max() != len(shortest_path.difference(covered_vertices)):
-        exit(10)
+        _,pred_map = dijkstra_search(g, adjusted_weight, source)
 
-    #trim covered vertices from start and end
-    #...
-    #better: build this step directly into the weight function s.t. |P| is minimized as a third priority?
+        shortest_path = []
 
-    return shortest_path
+        cursor = target
+        while pred_map[cursor] != cursor:
+            shortest_path.append(cursor)
+            cursor = pred_map[cursor]
+        shortest_path.append(source)
+
+        shortest_path.reverse()
+
+        if (all_dists+not_visited_source_vertex).max() != len(set(shortest_path).difference(covered_vertices)):
+            exit(10)
+
+        if len(all_currently_covered_vertices.intersection(shortest_path)) != 0:
+            all_dists[source, target] = -1
+            break
+        if len(shortest_path) > 1 and len(shortest_path) < current_length:
+            print(len(shortest_paths))
+            return shortest_paths
+
+        shortest_paths.append(shortest_path)
+        all_currently_covered_vertices = all_currently_covered_vertices.union(shortest_path)
+        if current_length < 0:
+            current_length = len(shortest_path)
+        #trim covered vertices from start and end
+        #...
+        #better: build this step directly into the weight function s.t. |P| is minimized as a third priority?
+
+        if len(shortest_path) < 2:# and z >=10:
+            break
+
+
+        z += 1
+
+    '''else:
+        #edge and vertex covering fast mode
+        for e in g.edges():
+            if e.source() not in covered_vertices and e.target not in covered_vertices:
+                shortest_paths.add([e.source, e.target])
+
+        for v in g.vertices():
+            if v not in covered_vertices:
+                shortest_paths.add([v])'''
+
+    return shortest_paths
 
 '''
 g: Directed graph
@@ -74,8 +89,6 @@ weight: double valued EdgeProperty
 def shortest_path_cover_logn_apx(g: Graph, weight: EdgePropertyMap):
     if not g.is_directed():
         g.set_directed(True)
-
-
 
     if weight.value_type() not in ["bool","int","int16_t", "int32_t", "int64_t"]:
         #min = np.min(weight.a)
@@ -96,19 +109,22 @@ def shortest_path_cover_logn_apx(g: Graph, weight: EdgePropertyMap):
     covered_vertices = set()
 
     while len(covered_vertices) != g.num_vertices():
-        path = shortest_path_visiting_most_nodes(g, adjusted_weight,covered_vertices,summed_edge_weight)
-        paths.append(path)
+        curr_paths = shortest_path_visiting_most_nodes(g, adjusted_weight,covered_vertices,summed_edge_weight)
 
-        #if len(path) <= 2 switch to fast mode and just add single edges/vertices until done.
+        for path in curr_paths:
+            paths.append(path)
 
-        for v in path.difference(covered_vertices):
-            for w in g.get_in_neighbors(v):
-                adjusted_weight[g.edge(w,v)] += 1#.a[list()] -= 1
-                if adjusted_weight[g.edge(w,v)] % (g.num_vertices()+1) != 0:
-                    exit(5)
-        new_covered = path.difference(covered_vertices)
-        covered_vertices = covered_vertices.union(path)
-        print(len(new_covered), len(path), len(covered_vertices), path)
+            #if len(path) <= 2 switch to fast mode and just add single edges/vertices until done.
+            path_vertices = set(path)
+            for v in path_vertices.difference(covered_vertices):
+                for w in g.get_in_neighbors(v):
+                    adjusted_weight[g.edge(w,v)] += 1#.a[list()] -= 1
+                    if adjusted_weight[g.edge(w,v)] % (g.num_vertices()+1) != 0:
+                        exit(5)
+
+            new_covered = path_vertices.difference(covered_vertices)
+            covered_vertices = covered_vertices.union(path_vertices)
+            print(len(new_covered), len(path), len(covered_vertices), path)
 
     return paths
 
