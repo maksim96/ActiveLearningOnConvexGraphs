@@ -16,7 +16,7 @@ def dumb_compute_closed_interval(g, S, weight):
 
     return visited_nodes
 
-def compute_hull(g, S, weight=None, dist_map=None, comps=None,hist=None,compute_closure=True):
+def compute_hull(g: Graph, S, weight=None, dist_map=None, comps=None,hist=None,compute_closure=True):
     """
 
     :param g:
@@ -25,7 +25,7 @@ def compute_hull(g, S, weight=None, dist_map=None, comps=None,hist=None,compute_
     :param dist_map: n*n array with the pairwise shortest distances. if = None, the function will compute it itself
     :param comps:
     :param hist:
-    :param compute_closure: #hull=closure or geodeteic set, which is faster
+    :param compute_closure: #hull=closure or geodetic set, which is faster
     :return:
     """
     n = g.num_vertices()
@@ -40,32 +40,58 @@ def compute_hull(g, S, weight=None, dist_map=None, comps=None,hist=None,compute_
         q.put(v)
 
     if dist_map is None:
-        dist_map = shortest_distance(g, weights=weight).get_2d_array(range(n))
+        dist_map = shortest_distance(g, weights=weight)
+        #dist_map = shortest_distance(g, weights=weight).get_2d_array(range(n))
+        #is possible but is super slow and memory heavy for some reason. not possible on my 16gb machine with graphs |V| roughly 15k.
 
     while not q.empty():
+
         v = q.get()
         if compute_closure:
             starting_nodes = np.arange(g.num_vertices())[I_S]
         else:
             starting_nodes = np.arange(g.num_vertices())[S]
-        starting_nodes = starting_nodes[starting_nodes > v]
+        starting_nodes = starting_nodes#[starting_nodes > v] #assume undirected
+
+        if comps is not None:
+            vs_comp = comps.a[v]
+            vs_comp = np.where(comps.a==vs_comp)[0]
+
+            if np.all(I_S[vs_comp]):
+                continue
 
         #all vertices x s.t. d(v,x)+d(x,s)=d(v,s) for some s \in S. These are exactly the ones on any shortest v-s-paths.
-        visited_nodes = np.any(dist_map[v,:]+dist_map[:,starting_nodes].T==dist_map[v,starting_nodes][:,np.newaxis],axis=0)
+        #visited_nodes = np.any(dist_map[v,:]+dist_map[:,starting_nodes].T==dist_map[v,starting_nodes][:,np.newaxis],axis=0)
+
+        visited_nodes = np.zeros(n, dtype=np.bool)
+
+        #careful this is not linear runtime. but constructing the "predecessor dag" is very slow with the Visitor classes.
+        if not g.is_directed():
+            for s in starting_nodes:
+                visited_nodes[np.where(dist_map[v].a+dist_map[s].a==dist_map[v].a[s])[0]] = True
+        else:
+            reachable_starting_nodes = starting_nodes[dist_map[v].a[starting_nodes] < np.iinfo(dist_map[v].a.dtype).max]
+            for i in range(n):
+                if I_S[i]:
+                    continue
+                if np.any(dist_map[v].a[i] + dist_map[i].a[[reachable_starting_nodes]] == dist_map[v].a[reachable_starting_nodes]):
+                    visited_nodes[i] = True
 
         if compute_closure:
-            for i in range(g.num_vertices()):
+            for i in range(n):
                 if not I_S[i] and visited_nodes[i]:
                     q.put(i)
 
         I_S[visited_nodes] = True
 
-        #eartly stopping if already covered all the connected components of S
+        #early stopping if already covered all the connected components of S
         if comps is not None:
             if np.sum(I_S) == np.sum(hist[np.unique(comps.get_array()[I_S])]):
                 break
         elif np.sum(I_S) == n:
             break
+
+        #print (np.sum(I_S), n)
 
     return I_S
 
