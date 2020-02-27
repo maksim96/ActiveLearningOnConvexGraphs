@@ -27,58 +27,66 @@ def shortest_path_visiting_most_nodes(g: Graph, adjusted_weight: EdgePropertyMap
     all_currently_covered_vertices = set()
     current_length = -1
     z = 0
+    n = g.num_vertices()
 
-    '''if (all_dists + not_visited_source_vertex).max()>2:'''
-
-    while True:
-
-        source, target = np.unravel_index((all_dists+not_visited_source_vertex).argmax(), all_dists.shape)
-
-        _,pred_map = dijkstra_search(g, adjusted_weight, source)
-
-        shortest_path = []
-
-        cursor = target
-        while pred_map[cursor] != cursor:
-            shortest_path.append(cursor)
-            cursor = pred_map[cursor]
-        shortest_path.append(source)
-
-        shortest_path.reverse()
-
-        if (all_dists+not_visited_source_vertex).max() != len(set(shortest_path).difference(covered_vertices)):
-            exit(10)
-
-        if len(all_currently_covered_vertices.intersection(shortest_path)) != 0:
-            all_dists[source, target] = -1
-            break
-        if len(shortest_path) > 1 and len(shortest_path) < current_length:
-            print(len(shortest_paths))
-            return shortest_paths
-
-        shortest_paths.append(shortest_path)
-        all_currently_covered_vertices = all_currently_covered_vertices.union(shortest_path)
-        if current_length < 0:
-            current_length = len(shortest_path)
-        #trim covered vertices from start and end
-        #...
-        #better: build this step directly into the weight function s.t. |P| is minimized as a third priority?
-
-        if len(shortest_path) < 2:# and z >=10:
-            break
-
-
-        z += 1
-
-    '''else:
-        #edge and vertex covering fast mode
+    #if the longest shortest path covers only <= 2 new nodes go to fast mode:
+    #simply add edges covering two vertices until not possible and then the remaining vertices.
+    if (all_dists + not_visited_source_vertex).max() <= 2:
+        covered_now = np.zeros(n, dtype=np.bool)
         for e in g.edges():
-            if e.source() not in covered_vertices and e.target not in covered_vertices:
-                shortest_paths.add([e.source, e.target])
+            if int(e.source()) == int(e.target()):
+                continue
+            if int(e.source()) not in covered_vertices and int(e.target()) not in covered_vertices and not covered_now[int(e.source())] and not covered_now[int(e.target())]:
+                shortest_paths.append([int(e.source()), int(e.target())])
+                all_currently_covered_vertices.add(int(e.source()))
+                all_currently_covered_vertices.add(int(e.target()))
+                covered_now[int(e.source())] = True
+                covered_now[int(e.target())] = True
+        single_vertices = set(range(n)).difference(covered_vertices.union(all_currently_covered_vertices))
 
-        for v in g.vertices():
-            if v not in covered_vertices:
-                shortest_paths.add([v])'''
+        for i in single_vertices:
+            shortest_paths.append([i])
+
+        return shortest_paths
+    else:
+        max_value = (all_dists + not_visited_source_vertex).max()
+
+        had_source = np.zeros(n, dtype=np.bool)
+
+        for source, target in np.array(np.where(all_dists+not_visited_source_vertex == max_value)).T:
+            if had_source[source]:
+                continue
+            _,pred_map = dijkstra_search(g, adjusted_weight, source)
+            shortest_path = []
+            cursor = target
+
+            while pred_map[cursor] != cursor:
+                shortest_path.append(cursor)
+                cursor = pred_map[cursor]
+            shortest_path.append(source)
+            shortest_path.reverse()
+
+            if (all_dists+not_visited_source_vertex).max() != len(set(shortest_path).difference(covered_vertices)):
+                exit(10)
+
+            if len(all_currently_covered_vertices.intersection(shortest_path)) != 0:
+                continue
+            if len(shortest_path) > 1 and len(shortest_path) < current_length:
+                #print(len(shortest_paths))
+                return shortest_paths
+
+            shortest_paths.append(shortest_path)
+            all_currently_covered_vertices = all_currently_covered_vertices.union(shortest_path)
+            if current_length < 0:
+                current_length = len(shortest_path)
+            #trim covered vertices from start and end
+            #...
+            #better: build this step directly into the weight function s.t. |P| is minimized as a third priority?
+
+            if len(shortest_path) <= 2:# and z >=10:
+                break
+
+            had_source[source] = True
 
     return shortest_paths
 
