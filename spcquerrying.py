@@ -217,6 +217,157 @@ def spc_querying_with_closure(g: gt.Graph, paths, weights, y):
 
     return known_labels, budget
 
+def spc_querying_with_shadow(g: gt.Graph, paths, weights, y):
+    '''
+
+    :param g:
+    :param paths: list of paths
+    :param y: ground truth
+    :param weight:
+    :return:
+    '''
+    np.random.seed(55)
+    #these two lines make repetitive closure computation a lot faster
+    dist_map = gt.shortest_distance(g, weights=weights)
+    comps, hist = gt.label_components(g)
+
+    known_labels = -np.ones(g.num_vertices())
+    num_of_known_labels = 0
+    budget = 0
+
+    pos_value, neg_value = np.unique(y)
+
+    next_candidate_queues = [Queue() for _ in paths]
+    left = np.zeros(len(paths), dtype=np.int)
+    right = np.array([len(p)-1 for p in paths], dtype=np.int)
+    queue_idxs = list(range(len(paths)))
+
+    n = g.num_vertices()
+
+    for i,path in enumerate(paths):
+        next_candidate_queues[i].put(0)
+        if len(path) > 1:
+            next_candidate_queues[i].put(len(path)-1)
+
+    starting_idx = np.random.choice(np.where(right>0)[0])
+    starting_path = paths[starting_idx]
+
+    budget += 2
+    l = next_candidate_queues[starting_idx].get()
+    r = next_candidate_queues[starting_idx].get()
+    known_labels[starting_path[l]] = y[starting_path[l]]
+    known_labels[starting_path[r]] = y[starting_path[r]]
+
+    if known_labels[starting_path[0]] == known_labels[starting_path[-1]]:
+        #color the hull of the path in the color of the endpoints
+        path_closure = np.where(compute_hull(g, starting_path, weights, dist_map, comps, hist))[0]
+        known_labels[path_closure] = known_labels[starting_path[0]]
+        num_of_known_labels = len(path_closure)
+        del queue_idxs[starting_idx]
+    else:
+        if (len(starting_path)>=3):
+            next_candidate_queues[starting_idx].put(l + (r - l)//2)
+        else:
+            del queue_idxs[starting_idx]
+        num_of_known_labels = 2
+
+    pos = np.where(known_labels==pos_value)[0]
+    neg = np.where(known_labels==neg_value)[0]
+
+    candidates = np.zeros(len(paths), dtype=np.int)
+
+    candidates[queue_idxs] = [next_candidate_queues[queue_idx].get() for queue_idx in queue_idxs] #this is always relative to the path
+
+    candidate_pos_hulls = np.zeros((len(paths),n), dtype=np.bool)
+    if len(pos) > 0:
+        candidate_pos_hulls[queue_idxs] = [closure.compute_shadow(g, np.append(pos, paths[idx][candidates[idx]]), neg, weights, dist_map, comps, hist) for idx in queue_idxs]
+    else:
+        for idx in queue_idxs:
+            candidate_pos_hulls[idx][paths[idx][candidates[idx]]] = True
+    candidate_neg_hulls = np.zeros((len(paths),n), dtype=np.bool)
+    if len(neg) > 0:
+        candidate_neg_hulls[queue_idxs] = [closure.compute_shadow(g, np.append(neg, paths[idx][candidates[idx]]), pos, weights, dist_map, comps, hist) for idx in queue_idxs]
+    else:
+        for idx in queue_idxs:
+            candidate_neg_hulls[idx][paths[idx][candidates[idx]]] = True
+    pos_gains = np.zeros(len(paths))
+    neg_gains = np.zeros(len(paths))
+
+    while num_of_known_labels < n:
+        to_remove = []
+        changed = []
+        for idx in queue_idxs:
+            while known_labels[paths[idx][candidates[idx]]] >= 0:
+                if not next_candidate_queues[idx].empty():
+                    candidates[idx] = next_candidate_queues[idx].get()
+                else:
+                    maybe_remove = refill_queue_for_candidate(idx, candidates[idx], candidates, known_labels, left, next_candidate_queues, paths, queue_idxs, right)
+                    if maybe_remove is not None:
+                        to_remove.append(maybe_remove)
+                        break
+                    else:
+                        candidates[idx] = next_candidate_queues[idx].get()
+                changed.append(idx)
+
+        for i in changed:
+            candidate_pos_hulls[i] = closure.compute_shadow(g, np.append(pos, paths[i][candidates[i]]), neg, weights, dist_map, comps, hist)
+            candidate_neg_hulls[i] = closure.compute_shadow(g, np.append(neg, paths[i][candidates[i]]), pos, weights, dist_map, comps, hist)
+
+        for i in to_remove:
+            queue_idxs.remove(i)
+            if np.sum(known_labels[paths[i]] >= 0) != len(paths[i]):
+                exit(555)
+
+        pos_gains[queue_idxs] = np.sum(candidate_pos_hulls[queue_idxs], axis=1) - len(pos)
+        neg_gains[queue_idxs] = np.sum(candidate_neg_hulls[queue_idxs], axis=1) - len(neg)
+
+        heuristic = np.average(np.array([pos_gains[queue_idxs], neg_gains[queue_idxs]]), axis=0)
+
+        candidate_idx = queue_idxs[np.argmax(heuristic)]
+        candidate_vertex = candidates[candidate_idx]
+
+        if known_labels[paths[candidate_idx][candidate_vertex]] == y[paths[candidate_idx][candidate_vertex]]:
+            exit(9)
+        known_labels[paths[candidate_idx][candidate_vertex]] = y[paths[candidate_idx][candidate_vertex]]
+
+        budget += 1
+
+        if known_labels[paths[candidate_idx][candidate_vertex]] == pos_value:
+            pos =np.where(candidate_pos_hulls[candidate_idx])[0]
+            known_labels[pos]  = pos_value
+            #only recompute pos hulls, the negatives won't change
+            candidate_pos_hulls[queue_idxs] = [closure.compute_shadow(g, np.append(pos, paths[idx][candidates[idx]]), neg, weights, dist_map, comps, hist) for idx in queue_idxs]
+            candidate_neg_hulls[queue_idxs] = [closure.compute_shadow(g, np.append(neg, paths[idx][candidates[idx]]), pos, weights, dist_map, comps, hist) for idx in queue_idxs]
+
+        else:
+            neg =np.where(candidate_neg_hulls[candidate_idx])[0]
+            known_labels[neg] = neg_value
+            # only recompute pos hulls, the negatives won't change
+            candidate_pos_hulls[queue_idxs] = [closure.compute_shadow(g, np.append(pos, paths[idx][candidates[idx]]), neg, weights, dist_map, comps, hist) for idx in queue_idxs]
+
+            candidate_neg_hulls[queue_idxs] = [closure.compute_shadow(g, np.append(neg, paths[idx][candidates[idx]]), pos, weights, dist_map, comps, hist) for idx in queue_idxs]
+
+        if next_candidate_queues[candidate_idx].empty():
+
+            maybe_remove = refill_queue_for_candidate(candidate_idx, candidate_vertex, candidates, known_labels, left, next_candidate_queues, paths, queue_idxs, right)
+            if maybe_remove is None:
+                candidates[candidate_idx] = next_candidate_queues[candidate_idx].get()
+            else:
+                queue_idxs.remove(candidate_idx)
+        else:
+            candidates[candidate_idx] = next_candidate_queues[candidate_idx].get()
+
+        candidate_pos_hulls[candidate_idx] = closure.compute_shadow(g, np.append(pos, paths[candidate_idx][candidates[candidate_idx]]), neg, weights, dist_map, comps, hist)
+        candidate_neg_hulls[candidate_idx] = closure.compute_shadow(g, np.append(neg, paths[candidate_idx][candidates[candidate_idx]]), pos, weights, dist_map, comps, hist)
+
+        pos = np.where(known_labels==pos_value)[0]
+        neg = np.where(known_labels==neg_value)[0]
+
+        num_of_known_labels = len(pos) + len(neg)
+
+        print(num_of_known_labels, n)
+
+    return known_labels, budget
 
 def refill_queue_for_candidate(candidate_idx, candidate_vertex, candidates, known_labels, left, next_candidate_queues, paths, queue_idxs, right):
     l = left[candidate_idx]
@@ -348,7 +499,7 @@ if __name__ == "__main__":
 
             g.set_directed(False)
 
-            a,b = spc_querying_with_closure(g, spc, weight_prop, y)
+            a,b = spc_querying_with_shadow(g, spc, weight_prop, y)
             print(a)
             print(y)
             if not np.all(a==y):

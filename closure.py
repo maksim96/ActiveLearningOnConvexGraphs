@@ -1,4 +1,5 @@
 import itertools
+import numbers
 import queue
 
 from graph_tool import _python_type, _prop
@@ -70,7 +71,11 @@ def compute_hull(g: Graph, S, weight=None, dist_map=None, comps=None,hist=None,c
             for s in starting_nodes:
                 visited_nodes[np.where(dist_map[v].a+dist_map[s].a==dist_map[v].a[s])[0]] = True
         else:
-            reachable_starting_nodes = starting_nodes[dist_map[v].a[starting_nodes] < np.iinfo(dist_map[v].a.dtype).max]
+            if np.issubclass_(dist_map[v].a.dtype, numbers.Integral):
+                max_value = np.iinfo(dist_map[v].a.dtype).max
+            else:
+                max_value = np.finfo(dist_map[v].a.dtype).max
+            reachable_starting_nodes = starting_nodes[dist_map[v].a[starting_nodes] < max_value]
             for i in range(n):
                 if I_S[i]:
                     continue
@@ -94,6 +99,24 @@ def compute_hull(g: Graph, S, weight=None, dist_map=None, comps=None,hist=None,c
         #print (np.sum(I_S), n)
 
     return I_S
+
+def compute_shadow(g: Graph, A,B, weight=None, dist_map=None, comps=None,hist=None):
+    A_closed = compute_hull(g, A, weight, dist_map, comps, hist)
+    B_closed = compute_hull(g, B, weight, dist_map, comps, hist)
+
+    shadow = A_closed.copy()
+
+    for x in range(g.num_vertices()):
+        if A_closed[x] or B_closed[x]:
+            continue
+
+        if np.any(compute_hull(g, np.append(np.where(B_closed)[0], x),  weight, dist_map, comps, hist, True) & A_closed):
+            shadow[x] = True
+
+    return shadow
+
+
+
 
 '''
 g = Graph(directed=False)
