@@ -147,6 +147,7 @@ def spc_querying_with_closure(g: gt.Graph, paths, weights, y):
 
     while num_of_known_labels < n:
         to_remove = []
+        changed = []
         for idx in queue_idxs:
             while known_labels[paths[idx][candidates[idx]]] >= 0:
                 if not next_candidate_queues[idx].empty():
@@ -158,6 +159,12 @@ def spc_querying_with_closure(g: gt.Graph, paths, weights, y):
                         break
                     else:
                         candidates[idx] = next_candidate_queues[idx].get()
+                changed.append(idx)
+
+        for i in changed:
+            candidate_pos_hulls[i] = compute_hull(g, np.append(pos, paths[i][candidates[i]]), weights, dist_map, comps, hist)
+            candidate_neg_hulls[i] = compute_hull(g, np.append(neg, paths[i][candidates[i]]), weights, dist_map, comps, hist)
+
         for i in to_remove:
             queue_idxs.remove(i)
             if np.sum(known_labels[paths[i]] >= 0) != len(paths[i]):
@@ -171,6 +178,8 @@ def spc_querying_with_closure(g: gt.Graph, paths, weights, y):
         candidate_idx = queue_idxs[np.argmax(heuristic)]
         candidate_vertex = candidates[candidate_idx]
 
+        if known_labels[paths[candidate_idx][candidate_vertex]] == y[paths[candidate_idx][candidate_vertex]]:
+            exit(9)
         known_labels[paths[candidate_idx][candidate_vertex]] = y[paths[candidate_idx][candidate_vertex]]
 
         budget += 1
@@ -314,30 +323,37 @@ if __name__ == "__main__":
     files = os.listdir("res/synthetic/")
     files.sort(key=natural_keys)
     for filename in files:
-        if ".csv" not in filename:
-            continue
-        instance = filename.split(".")[0]
-        print("======================================================")
-        print("file: ", instance)
-        edges = np.genfromtxt("res/synthetic/" + instance + ".csv", delimiter=",", dtype=np.int)[:, :2]
-        n = np.max(edges)+1
-        g = gt.Graph(directed=False)
-        g.add_vertex(n)
-        g.add_edge_list(edges)
-        weight_prop = g.new_edge_property("double", val=1)
+        for label_idx in range(10):
+            if ".csv" not in filename:
+                continue
+            if "4_5_0" in filename:
+                continue
+            instance = filename.split(".")[0]
+            print("======================================================")
+            print("file", instance, "label", label_idx)
+            edges = np.genfromtxt("res/synthetic/" + instance + ".csv", delimiter=",", dtype=np.int)[:, :2]
+            n = np.max(edges)+1
+            g = gt.Graph(directed=False)
+            g.add_vertex(n)
+            g.add_edge_list(edges)
+            weight_prop = g.new_edge_property("double", val=1)
 
-        y = np.zeros(n)
-        y[np.genfromtxt("res/synthetic/labels/" + instance + "_0_positive.csv", dtype=np.int)] = True
+            y = np.zeros(n)
+            add_string = ""
+            if label_idx >= 4:
+                add_string = "_simplicial_start"
+            y[np.genfromtxt("res/synthetic/labels/" + instance + "_"+str(label_idx)+add_string+"_positive.csv", dtype=np.int)] = True
 
-        spc = shortest_path_cover_logn_apx(g, weight_prop)
+            spc = shortest_path_cover_logn_apx(g, weight_prop)
 
-        g.set_directed(False)
+            g.set_directed(False)
 
-        a,b = spc_querying_with_closure(g, spc, weight_prop, y)
-        print(a)
-        print(y)
-        print(np.all(a==y))
-        print(b)
+            a,b = spc_querying_with_closure(g, spc, weight_prop, y)
+            print(a)
+            print(y)
+            if not np.all(a==y):
+                exit(22)
+            print(b)
 
 if __name__ == "__main2__":
     print("========================================================")
