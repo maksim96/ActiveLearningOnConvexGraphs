@@ -95,8 +95,12 @@ g: Directed graph
 weight: double valued EdgeProperty
 '''
 def shortest_path_cover_logn_apx(g: Graph, weight: EdgePropertyMap):
+    started_with_directed = g.is_directed()
     if not g.is_directed():
+        reversed_edges = np.fliplr(g.get_edges())
         g.set_directed(True)
+        g.add_edge_list(reversed_edges)
+        weight.a[-reversed_edges.shape[0]:] = weight.a[:reversed_edges.shape[0]]
 
     if weight.value_type() not in ["bool","int","int16_t", "int32_t", "int64_t"]:
         #min = np.min(weight.a)
@@ -133,7 +137,10 @@ def shortest_path_cover_logn_apx(g: Graph, weight: EdgePropertyMap):
             new_covered = path_vertices.difference(covered_vertices)
             covered_vertices = covered_vertices.union(path_vertices)
             print(len(new_covered), len(path), len(covered_vertices), path)
-
+    if not started_with_directed:
+        g.set_directed(False)
+        for e in reversed_edges:
+            g.remove_edge(g.edge(e[0],e[1]))
     return paths
 
 if __name__ == "__main__":
