@@ -42,7 +42,7 @@ def florians_procedure(g: gt.Graph, use_simplicial):
         if i %2 == 0:
 
             A[e] = True
-            A_new = compute_hull(g,np.where(A==True)[0])
+            A_new =  (g,np.where(A==True)[0])
             if not np.any(B&A_new):
                 A = A_new
                 F = F.difference(set(np.where(A==True)[0]))
@@ -70,10 +70,11 @@ def florians_procedure(g: gt.Graph, use_simplicial):
                     F = F.difference(set(np.where(A == True)[0]))
 
         i += 1
+        print(len(F))
     return A,B
 
 def label_graph(instance, i, use_simplicial):
-    edges = np.genfromtxt("res/synthetic/"+instance+".csv", delimiter=",",dtype=np.int)[:,:2]
+    edges = np.genfromtxt("res/new_synthetic/"+instance+".csv", delimiter=",",dtype=np.int)[:,:2]
     n = np.max(edges-1)
     g = gt.Graph(directed=False)
     g.add_vertex(n)
@@ -91,11 +92,11 @@ def label_graph(instance, i, use_simplicial):
     simplicial_string = "_simplicial_start"
     if not use_simplicial:
         simplicial_string = ""
-    file = open("res/synthetic/labels/"+instance+"_"+str(i)+simplicial_string+"_positive.csv", 'w')
+    file = open("res/new_synthetic/labels/"+instance+"_"+str(i)+simplicial_string+"_positive.csv", 'w')
     writer = csv.writer(file)
     writer.writerows(np.where(A)[0].reshape((-1,1)))
     #print(len(np.where(A)[0])/n)
-    gt.graph_draw(g, pos=gt.arf_layout(g, max_iter=0),vertex_fill_color=pos,output="res/synthetic/images/"+instance+"_"+str(i)+"_"+simplicial_string+".svg")
+    gt.graph_draw(g, pos=gt.arf_layout(g, max_iter=0),vertex_fill_color=pos,output="res/new_synthetic/images/"+instance+"_"+str(i)+"_"+simplicial_string+".svg")
 
     #print(A)
     #print(B)
@@ -112,18 +113,17 @@ def natural_keys(text):
     (See Toothy's implementation in the comments)
     '''
     if "_" in text:
-        a,b,c = text.split("_")
+        a,b = text.split("_")
         a = int(a)
-        b = int(b)
-        c = int(c[0])
-        return [a*b,a,c ]
+        b = int(b[0])
+        return [a,b]
     return [0,0]
 if __name__=="__main__":
     np.random.seed(43)
-    files = os.listdir("res/synthetic/")
+    files = os.listdir("res/new_synthetic/")
     files.sort(key=natural_keys)
     for filename in files:
-        if ".csv" not in filename:
+        if ".csv" not in filename or "500" not in filename:
             continue
         instance = filename.split(".")[0]
         print("============================")

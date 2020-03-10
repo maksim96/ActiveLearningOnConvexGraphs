@@ -2,8 +2,8 @@ import itertools
 import numbers
 import queue
 
-from graph_tool import _python_type, _prop
-from graph_tool.all import *
+#from graph_tool import _python_type, _prop
+import graph_tool as gt
 import numpy as np
 
 
@@ -12,12 +12,12 @@ def dumb_compute_closed_interval(g, S, weight):
     visited_nodes = set(S)
 
     for i,j in itertools.combinations(S,2):
-        for path in all_shortest_paths(g, i,j,weights=weight):
+        for path in gt.topology.all_shortest_paths(g, i,j,weights=weight):
             visited_nodes = visited_nodes.union(path)
 
     return visited_nodes
 
-def compute_hull(g: Graph, S, weight=None, dist_map=None, comps=None,hist=None,compute_closure=True):
+def compute_hull(g: gt.Graph, S, weight=None, dist_map=None, comps=None,hist=None,compute_closure=True, already_closed=None):
     """
 
     :param g:
@@ -41,7 +41,7 @@ def compute_hull(g: Graph, S, weight=None, dist_map=None, comps=None,hist=None,c
         q.put(v)
 
     if dist_map is None:
-        dist_map = shortest_distance(g, weights=weight)
+        dist_map = gt.topology.shortest_distance(g, weights=weight)
         #dist_map = shortest_distance(g, weights=weight).get_2d_array(range(n))
         #is possible but is super slow and memory heavy for some reason. not possible on my 16gb machine with graphs |V| roughly 15k.
 
@@ -69,6 +69,12 @@ def compute_hull(g: Graph, S, weight=None, dist_map=None, comps=None,hist=None,c
         #careful this is not linear runtime. but constructing the "predecessor dag" is very slow with the Visitor classes.
         if not g.is_directed():
             for s in starting_nodes:
+                if s <= v:
+                    continue
+                #if already_closed is not None:
+                #    if already_closed[v] and already_closed[s]:
+                #        #print("yay")
+                #        continue
                 visited_nodes[np.where(dist_map[v].a+dist_map[s].a==dist_map[v].a[s])[0]] = True
         else:
             if np.issubclass_(dist_map[v].a.dtype, numbers.Integral):
@@ -100,18 +106,24 @@ def compute_hull(g: Graph, S, weight=None, dist_map=None, comps=None,hist=None,c
 
     return I_S
 
-def compute_shadow(g: Graph, A,B, weight=None, dist_map=None, comps=None,hist=None):
+def compute_shadow(g: gt.Graph, A,B, weight=None, dist_map=None, comps=None,hist=None, B_hulls=None):
     A_closed = compute_hull(g, A, weight, dist_map, comps, hist)
-    B_closed = compute_hull(g, B, weight, dist_map, comps, hist)
+    #B_closed = compute_hull(g, B, weight, dist_map, comps, hist)
+
+    B_closed = np.zeros(g.num_vertices(), dtype=np.bool)
+    B_closed[B] = True
 
     shadow = A_closed.copy()
 
     for x in range(g.num_vertices()):
         if A_closed[x] or B_closed[x]:
             continue
-
-        if np.any(compute_hull(g, np.append(np.where(B_closed)[0], x),  weight, dist_map, comps, hist, True) & A_closed):
-            shadow[x] = True
+        if B_hulls is None:
+            if np.any(compute_hull(g, np.append(B, x),  weight, dist_map, comps, hist, True) & A_closed):
+                shadow[x] = True
+        else:
+            if np.any(B_hulls[x] & A_closed):
+                shadow[x] = True
 
     return shadow
 

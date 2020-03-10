@@ -2,14 +2,15 @@ import numpy as np
 import pandas as pd
 import graph_tool.all as gt
 import sagemath
-
+import pickle
 import simplicial_vertices
+from DijkstraVisitingMostNodes import shortest_path_cover_logn_apx
 from closure import compute_hull, dumb_compute_closed_interval
 
 from scipy.spatial.distance import sqeuclidean, pdist
 def is_convex():
     print("citeseer")
-    print("unweighted")
+    print("weighted")
     np.random.seed(0)
 
     attributes_df = pd.read_csv('res/citeseer/citeseer.content', sep="\t", header=None, dtype=np.str)
@@ -23,13 +24,13 @@ def is_convex():
     renamed = edges_df.replace(old_ids, new_ids)
     edges = renamed.to_numpy(dtype=np.int)
     edges = np.fliplr(edges)
-    g = gt.Graph(directed=False)
+    g = gt.Graph(directed=True)
 
     g.add_edge_list(edges)
 
-    weight = None#np.sum(np.abs(features[edges[:,0]] - features[edges[:,1]]), axis=1)
+    weight = np.sum(np.abs(features[edges[:,0]] - features[edges[:,1]]), axis=1)
 
-    weight_prop = None#g.new_edge_property("int", val=1)
+    weight_prop = g.new_edge_property("int", val=1)
 
     #weight = g.new_edge_property("double", vals=weight)
 
@@ -40,10 +41,11 @@ def is_convex():
 
     print("n=",g.num_vertices(), "s=", len(simple))
 
+    spc = shortest_path_cover_logn_apx(g, weight_prop)
 
+    pickle.dump(spc, open("res/citeseer/spc_directed_unweighted.p", "wb"))
 
-
-    intersection_0 = []
+    '''intersection_0 = []
     intersection_1 = []
     intersection_2 = []
     intersection_3 = []
@@ -83,6 +85,6 @@ def is_convex():
 
     print("==================================")
 
-
+    '''
 
 is_convex()

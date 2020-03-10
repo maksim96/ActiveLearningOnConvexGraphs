@@ -1,7 +1,7 @@
 import itertools
 
 from graph_tool import _python_type, _prop
-from graph_tool.all import *
+import graph_tool as gt
 import numpy as np
 from graph_tool.search import libgraph_tool_search
 
@@ -9,9 +9,9 @@ from graph_tool.search import libgraph_tool_search
 g: Directed graph
 weight: EdgeProperty map with vector<double> of length 2 values. First entry normal weight, second entry = 1 <=> not visited target
 '''
-def shortest_path_visiting_most_nodes(g: Graph, adjusted_weight: EdgePropertyMap,covered_vertices,summed_edge_weight):
+def shortest_path_visiting_most_nodes(g: gt.Graph, adjusted_weight: gt.EdgePropertyMap,covered_vertices,summed_edge_weight):
 
-    dist_map= shortest_distance(g, weights=adjusted_weight)
+    dist_map= gt.topology.shortest_distance(g, weights=adjusted_weight)
 
     not_visited_source_vertex = np.ones(g.num_vertices(), dtype=np.bool)
     not_visited_source_vertex[list(covered_vertices)] = False
@@ -54,18 +54,10 @@ def shortest_path_visiting_most_nodes(g: Graph, adjusted_weight: EdgePropertyMap
         had_source = np.zeros(n, dtype=np.bool)
 
         for source, target in np.array(np.where(all_dists+not_visited_source_vertex == max_value)).T:
-            if had_source[source]:
+            if had_source[source] or source in all_currently_covered_vertices or target in all_currently_covered_vertices:
                 continue
-            _,pred_map = dijkstra_search(g, adjusted_weight, source)
-            shortest_path = []
-            cursor = target
-
-            while pred_map[cursor] != cursor:
-                shortest_path.append(cursor)
-                cursor = pred_map[cursor]
-            shortest_path.append(source)
-            shortest_path.reverse()
-
+            shortest_path,_ = gt.topology.shortest_path(g, source, target, adjusted_weight)
+            shortest_path = [int(v) for v in shortest_path]
             if (all_dists+not_visited_source_vertex).max() != len(set(shortest_path).difference(covered_vertices)):
                 exit(10)
 
@@ -94,7 +86,7 @@ def shortest_path_visiting_most_nodes(g: Graph, adjusted_weight: EdgePropertyMap
 g: Directed graph
 weight: double valued EdgeProperty
 '''
-def shortest_path_cover_logn_apx(g: Graph, weight: EdgePropertyMap):
+def shortest_path_cover_logn_apx(g: gt.Graph, weight: gt.EdgePropertyMap):
     started_with_directed = g.is_directed()
     if not g.is_directed():
         reversed_edges = np.fliplr(g.get_edges())
@@ -144,7 +136,7 @@ def shortest_path_cover_logn_apx(g: Graph, weight: EdgePropertyMap):
     return paths
 
 if __name__ == "__main__":
-    g = Graph(directed=False)
+    g = gt.Graph(directed=False)
 
     g.add_vertex(10)
 

@@ -14,16 +14,15 @@ def natural_keys(text):
     (See Toothy's implementation in the comments)
     '''
     if "_" in text:
-        a,b,c = text.split("_")
+        a,b = text.split("_")
         a = int(a)
-        b = int(b)
-        c = int(c[0])
-        return [a*b,a,c ]
+        b = int(b[0])
+        return [a,b]
     return [0,0]
 
 if __name__=="__main__":
     np.random.seed(43)
-    files = os.listdir("res/synthetic/")
+    files = os.listdir("res/new_synthetic/")
     files.sort(key=natural_keys)
     for filename in files:
         if ".csv" not in filename:
@@ -31,7 +30,7 @@ if __name__=="__main__":
         instance = filename.split(".")[0]
         print("======================================================")
         print("file: ", instance)
-        edges = np.genfromtxt("res/synthetic/" + instance + ".csv", delimiter=",", dtype=np.int)[:, :2]
+        edges = np.genfromtxt("res/new_synthetic/" + instance + ".csv", delimiter=",", dtype=np.int)[:, :2]
         n = np.max(edges - 1)
         g = gt.Graph(directed=False)
         g.add_vertex(n)
@@ -40,4 +39,4 @@ if __name__=="__main__":
 
         spc = shortest_path_cover_logn_apx(g, weight_prop)
 
-        pickle.dump(spc, open("res/synthetic/spc/" + instance + ".p", "wb"))
+        pickle.dump(spc, open("res/new_synthetic/spc/" + instance + ".p", "wb"))

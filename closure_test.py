@@ -17,7 +17,7 @@ def is_convex(dataset):
     for n_prime in [n]:
         print("================================")
         print("n_prime=",n_prime)
-        for q in [0.01]:
+        for q in [0.001,0.002,0.005,0.01,0.02,0.05]:
             print("q=",q)
             dists = scipy.spatial.distance.cdist(X, X)
             y = y[:n]
@@ -45,7 +45,7 @@ def is_convex(dataset):
             comps,hist = gt.topology.label_components(g)
 
             print(len(simplicial_vertices(g)))
-
+            continue
             paths = shortest_path_cover_logn_apx(g, weight_prop)
 
             sum = 0
@@ -126,14 +126,14 @@ print(n,pos,neg)
 print("p",len(pos))
 print("n",len(neg))
 
-pos_hull = closure.compute_hull(g,pos, weight_prop,comps,hist)
-print(np.sum(pos_hull))
-neg_hull = closure.compute_hull(g, neg, weight_prop,comps,hist)
-print(np.sum(neg_hull))
-print(len(set(np.where(pos_hull)[0]).intersection(set(np.where(neg_hull)[0])))/n)
+#pos_hull = closure.compute_hull(g,pos, weight_prop,None,comps,hist)
+#print(np.sum(pos_hull))
+#neg_hull = closure.compute_hull(g, neg, weight_prop,None,comps,hist)
+#print(np.sum(neg_hull))
+#print(len(set(np.where(pos_hull)[0]).intersection(set(np.where(neg_hull)[0])))/n)
 
 print("===============================================================")
-known_labels, budget = spc_querying_naive(g, paths,y, weight_prop, labels_csv[:,1])
+known_labels, budget = spc_querying_naive(g, paths,y)#, labels_csv[:,1])
 idx = (labels_csv[:,1] == 1) | (labels_csv[:,1] == 5)
 print(np.sum(np.abs(known_labels[idx]-y[idx])/idx.size))
 print(budget)
