@@ -88,7 +88,7 @@ def spc_querying_with_closure(g: gt.Graph, paths, weights, y, whole_hull=True, e
     '''
     np.random.seed(55)
     #these two lines make repetitive closure computation a lot faster
-    dist_map = gt.topology.shortest_distance(g, weights=weights)
+    dist_map = gt.topology.shortest_distance(g, weights=weights).get_2d_array(range(g.num_vertices())).T
     comps, hist = gt.topology.label_components(g)
 
     known_labels = -np.ones(g.num_vertices())
@@ -170,8 +170,8 @@ def spc_querying_with_closure(g: gt.Graph, paths, weights, y, whole_hull=True, e
                 changed.append(idx)
 
         for i in changed:
-            candidate_pos_hulls[i] = compute_hull(g, np.append(pos, paths[i][candidates[i]]), weights, dist_map, comps, hist, whole_hull, already_closed=candidate_pos_hulls[idx])
-            candidate_neg_hulls[i] = compute_hull(g, np.append(neg, paths[i][candidates[i]]), weights, dist_map, comps, hist, whole_hull, already_closed=candidate_pos_hulls[idx])
+            candidate_pos_hulls[i] = compute_hull(g, np.append(pos, paths[i][candidates[i]]), weights, dist_map, comps, hist, whole_hull, already_closed=pos)
+            candidate_neg_hulls[i] = compute_hull(g, np.append(neg, paths[i][candidates[i]]), weights, dist_map, comps, hist, whole_hull, already_closed=neg)
 
         for i in to_remove:
             queue_idxs.remove(i)
@@ -196,12 +196,12 @@ def spc_querying_with_closure(g: gt.Graph, paths, weights, y, whole_hull=True, e
             pos =np.where(candidate_pos_hulls[candidate_idx])[0]
             known_labels[pos]  = pos_value
             #only recompute pos hulls, the negatives won't change
-            candidate_pos_hulls[queue_idxs] = [compute_hull(g, np.append(pos, paths[idx][candidates[idx]]), weights, dist_map, comps, hist, whole_hull, already_closed=candidate_pos_hulls[idx]) for idx in queue_idxs]
+            candidate_pos_hulls[queue_idxs] = [compute_hull(g, np.append(pos, paths[idx][candidates[idx]]), weights, dist_map, comps, hist, whole_hull, already_closed=pos) for idx in queue_idxs]
         else:
             neg = np.where(candidate_neg_hulls[candidate_idx])[0]
             known_labels[neg] = neg_value
             # only recompute pos hulls, the negatives won't change
-            candidate_neg_hulls[queue_idxs] = [compute_hull(g, np.append(neg, paths[idx][candidates[idx]]), weights, dist_map, comps, hist, whole_hull, already_closed=candidate_pos_hulls[idx]) for idx in queue_idxs]
+            candidate_neg_hulls[queue_idxs] = [compute_hull(g, np.append(neg, paths[idx][candidates[idx]]), weights, dist_map, comps, hist, whole_hull, already_closed=neg) for idx in queue_idxs]
 
         if next_candidate_queues[candidate_idx].empty():
 
@@ -213,11 +213,11 @@ def spc_querying_with_closure(g: gt.Graph, paths, weights, y, whole_hull=True, e
         else:
             candidates[candidate_idx] = next_candidate_queues[candidate_idx].get()
 
-        candidate_pos_hulls[candidate_idx] = compute_hull(g, np.append(pos, paths[candidate_idx][candidates[candidate_idx]]), weights, dist_map, comps, hist, whole_hull, already_closed=candidate_pos_hulls[idx])
-        candidate_neg_hulls[candidate_idx] = compute_hull(g, np.append(neg, paths[candidate_idx][candidates[candidate_idx]]),weights, dist_map, comps, hist, whole_hull, already_closed=candidate_pos_hulls[idx])
+        candidate_pos_hulls[candidate_idx] = compute_hull(g, np.append(pos, paths[candidate_idx][candidates[candidate_idx]]), weights, dist_map, comps, hist, whole_hull, already_closed=pos)
+        candidate_neg_hulls[candidate_idx] = compute_hull(g, np.append(neg, paths[candidate_idx][candidates[candidate_idx]]),weights, dist_map, comps, hist, whole_hull, already_closed=neg)
 
-        pos = np.where(known_labels==pos_value)[0]
-        neg = np.where(known_labels==neg_value)[0]
+        #pos = np.where(compute_hull(g, np.where(known_labels==pos_value)[0], weights, dist_map, comps, hist, whole_hull))[0]
+        #neg = np.where(compute_hull(g, np.where(known_labels==neg_value)[0], weights, dist_map, comps, hist, whole_hull))[0]
 
         num_of_known_labels = len(pos) + len(neg)
 
@@ -236,7 +236,7 @@ def spc_querying_with_shadow(g: gt.Graph, paths, weights, y):
     '''
     np.random.seed(55)
     #these two lines make repetitive closure computation a lot faster
-    dist_map = gt.topology.shortest_distance(g, weights=weights)
+    dist_map = gt.topology.shortest_distance(g, weights=weights).get_2d_array(range(g.num_vertices())).T
     comps, hist = gt.topology.label_components(g)
 
     known_labels = -np.ones(g.num_vertices())
@@ -320,8 +320,8 @@ def spc_querying_with_shadow(g: gt.Graph, paths, weights, y):
                 changed.append(idx)
 
         for i in range(n):
-            temp_pos_hulls[i] = closure.compute_hull(g, np.append(pos, i), weights, dist_map, comps, hist)
-            temp_neg_hulls[i] = closure.compute_hull(g, np.append(neg, i), weights, dist_map, comps, hist)
+            temp_pos_hulls[i] = closure.compute_hull(g, np.append(pos, i), weights, dist_map, comps, hist, True, pos if len(pos) > 0 else None)
+            temp_neg_hulls[i] = closure.compute_hull(g, np.append(neg, i), weights, dist_map, comps, hist, True, neg if len(neg) > 0 else None)
 
         for i in changed:
             candidate_pos_hulls[i] = closure.compute_shadow(g, np.append(pos, paths[i][candidates[i]]), neg, weights, dist_map, comps, hist, B_hulls=temp_neg_hulls)
@@ -374,9 +374,10 @@ def spc_querying_with_shadow(g: gt.Graph, paths, weights, y):
         candidate_pos_hulls[candidate_idx] = closure.compute_shadow(g, np.append(pos, paths[candidate_idx][candidates[candidate_idx]]), neg, weights, dist_map, comps, hist, temp_neg_hulls)
         candidate_neg_hulls[candidate_idx] = closure.compute_shadow(g, np.append(neg, paths[candidate_idx][candidates[candidate_idx]]), pos, weights, dist_map, comps, hist, temp_pos_hulls)
 
-        pos = np.where(known_labels==pos_value)[0]
-        neg = np.where(known_labels==neg_value)[0]
-
+        #pos = np.where(known_labels==pos_value)[0]
+        #neg = np.where(known_labels==neg_value)[0]
+        pos = np.where(compute_hull(g, np.where(known_labels==pos_value)[0], weights, dist_map, comps, hist))[0]
+        neg = np.where(compute_hull(g, np.where(known_labels==neg_value)[0], weights, dist_map, comps, hist))[0]
         num_of_known_labels = len(pos) + len(neg)
 
         print(num_of_known_labels, n)
@@ -475,8 +476,8 @@ if __name__ == "__main__":
     files = os.listdir("res/new_synthetic/")
     files.sort(key=natural_keys)
     for filename in files:
-        for label_idx in range(5,10):
-            if "200_4" not in filename:
+        for label_idx in range(5):
+            if "500" not in filename:
                 continue
             instance = filename.split(".")[0]
             print("======================================================")
@@ -494,8 +495,8 @@ if __name__ == "__main__":
                 add_string = "_simplicial_start"
             y[np.genfromtxt("res/new_synthetic/labels/" + instance + "_"+str(label_idx)+add_string+"_positive.csv", dtype=np.int)] = True
 
-            spc = shortest_path_cover_logn_apx(g, weight_prop)#pickle.load(open("res/new_synthetic/spc/" + instance + ".p", "rb"))
-
+            #spc = shortest_path_cover_logn_apx(g, weight_prop)#pickle.load(open("res/new_synthetic/spc/" + instance + ".p", "rb"))
+            spc = pickle.load(open("res/new_synthetic/spc/" + instance + ".p", "rb"))
             g.set_directed(False)
 
             a,b = spc_querying_naive(g, spc, y)

@@ -38,7 +38,8 @@ def compute_hull(g: gt.Graph, S, weight=None, dist_map=None, comps=None,hist=Non
     q = queue.Queue()
 
     for v in S:
-        q.put(v)
+        if already_closed is None or v not in already_closed:
+            q.put(v)
 
     if dist_map is None:
         dist_map = gt.topology.shortest_distance(g, weights=weight)
@@ -68,25 +69,37 @@ def compute_hull(g: gt.Graph, S, weight=None, dist_map=None, comps=None,hist=Non
 
         #careful this is not linear runtime. but constructing the "predecessor dag" is very slow with the Visitor classes.
         if not g.is_directed():
-            for s in starting_nodes:
-                if s <= v:
-                    continue
+            #debug= set()
+            '''for s in starting_nodes:
+                #if s <= v:
+                #    continue
                 #if already_closed is not None:
                 #    if already_closed[v] and already_closed[s]:
                 #        #print("yay")
                 #        continue
-                visited_nodes[np.where(dist_map[v].a+dist_map[s].a==dist_map[v].a[s])[0]] = True
+                debug = debug.union(np.where(dist_map[v]+dist_map[s]==dist_map[v,s])[0])
+                #visited_nodes[np.where(dist_map[v].a+dist_map[s].a==dist_map[v].a[s])[0]] = True'''
+
+            visited_nodes[np.any(dist_map[v,:]+dist_map[:,starting_nodes].T==dist_map[v,starting_nodes][:,np.newaxis],axis=0)] = True
+
+
+            #first_mins = starting_nodes[np.argmin(dist_map[:, starting_nodes], axis=1)]
+            #second_mins = starting_nodes[np.argpartition(dist_map[:, starting_nodes], 1, axis=1)[:, 1].astype(np.int)]
+
+            #visited_nodes[dist_map[first_mins, range(n)]+ dist_map[range(n),second_mins] == dist_map[first_mins,second_mins]] = True
         else:
             if np.issubclass_(dist_map[v].a.dtype, numbers.Integral):
                 max_value = np.iinfo(dist_map[v].a.dtype).max
             else:
                 max_value = np.finfo(dist_map[v].a.dtype).max
             reachable_starting_nodes = starting_nodes[dist_map[v].a[starting_nodes] < max_value]
-            for i in range(n):
+            '''for i in range(n):
                 if I_S[i]:
                     continue
                 if np.any(dist_map[v].a[i] + dist_map[i].a[[reachable_starting_nodes]] == dist_map[v].a[reachable_starting_nodes]):
-                    visited_nodes[i] = True
+                    visited_nodes[i] = True'''
+
+
 
         if compute_closure:
             for i in range(n):
